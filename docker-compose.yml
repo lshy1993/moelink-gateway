@@ -11,5 +11,5 @@ services:
       - moelink_net
 
 networks:
-  moelink_net:
+  moelink-net:
     external: true
