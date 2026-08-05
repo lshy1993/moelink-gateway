@@ -5,8 +5,8 @@ services:
     ports:
       - "3000:8080" # 把宿主机 3000 端口映射到 nginx 容器的 8080
     environment:
-      # 默认指向名为 `genshin-backend` 的容器
-      - VITE_API_URL=${VITE_API_URL:-http://genshin-backend:8080}
+      # 默认指向名为 `genshinquiz-backend` 的容器
+      - VITE_API_URL=${VITE_API_URL:-http://genshinquiz-backend:8080}
     networks:
       - moelink-net
 
