@@ -1,0 +1,25 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/genshin-gateway:$SHORT_SHA', '.']
+    dir: docker/nginx
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/genshin-gateway:$SHORT_SHA']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        REGION=${REGION:-us-central1}
+        VITE_API_URL=${VITE_API_URL:-http://backend:3000}
+        gcloud run deploy genshin-gateway \
+          --image gcr.io/$PROJECT_ID/genshin-gateway:$SHORT_SHA \
+          --platform managed \
+          --region "$REGION" \
+          --port 8080 \
+          --set-env-vars VITE_API_URL="$VITE_API_URL" \
+          --allow-unauthenticated
+
+images:
+  - 'gcr.io/$PROJECT_ID/genshin-gateway:$SHORT_SHA'
