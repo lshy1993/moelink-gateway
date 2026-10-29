@@ -1,0 +1,64 @@
+{
+  "port": 8000,
+  "adminToken": "",
+  "statsFile": "/data/stats.json",
+  "health": {
+    "intervalMs": 15000,
+    "timeoutMs": 5000,
+    "failThreshold": 3
+  },
+  "services": [
+    {
+      "name": "node-api",
+      "prefix": "/node-api",
+      "target": "http://node-api:8020",
+      "healthPath": "/health",
+      "tracked": [
+        "GET /api/public/*"
+      ],
+      "release": {
+        "repo": "lshy1993/node-api",
+        "branch": "develop",
+        "gitPath": "/repos/node-api"
+      }
+    },
+    {
+      "name": "genshinquiz-backend",
+      "prefix": "/go-api",
+      "target": "http://genshinquiz-backend:8080",
+      "healthPath": "/health",
+      "tracked": [],
+      "release": {
+        "repo": "lshy1993/genshin-quiz-backend",
+        "branch": "development",
+        "gitPath": "/repos/backend"
+      }
+    },
+    {
+      "name": "maj-server",
+      "target": "http://maj-server:8181",
+      "healthType": "tcp",
+      "release": {
+        "repo": "lshy1993/node-api",
+        "branch": "develop",
+        "gitPath": "/repos/node-api"
+      }
+    },
+    {
+      "name": "genshinquiz-frontend",
+      "target": "http://genshinquiz-frontend:3000",
+      "healthPath": "/",
+      "healthHost": "localhost",
+      "release": {
+        "repo": "lshy1993/genshin-quiz",
+        "branch": "main",
+        "gitPath": "/repos/frontend"
+      }
+    }
+  ],
+  "notifiers": [
+    {
+      "type": "log"
+    }
+  ]
+}
