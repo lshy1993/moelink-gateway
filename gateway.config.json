@@ -46,7 +46,7 @@
     },
     {
       "name": "genshinquiz-frontend",
-      "target": "http://genshinquiz-frontend:3000",
+      "target": "http://genshinquiz-frontend:8080",
       "healthPath": "/",
       "healthHost": "localhost",
       "release": {

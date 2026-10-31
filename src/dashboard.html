@@ -33,6 +33,10 @@
   .bars { display:flex; align-items:flex-end; gap:2px; height:80px; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
   .bars div { flex:1; background:#4c8dff; min-height:1px; border-radius:2px 2px 0 0; }
   #err { color:var(--bad); }
+  #login-view { max-width:420px; margin-top:12vh; }
+  #login-form { display:grid; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  #login-form input { width:100%; }
+  #login-form button { justify-self:start; }
 </style>
 </head>
 <body>
@@ -40,28 +44,70 @@
   <h1>MoeLink Gateway</h1>
   <span id="err"></span>
   <small id="upd"></small>
-  <input id="tok" type="password" placeholder="Admin token" size="14">
-  <button id="save">Save</button>
+  <span id="who" class="dim"></span>
+  <button id="logout" hidden>Logout</button>
 </header>
-<main>
+
+<main id="login-view" hidden>
+  <section>
+    <h2>Admin login</h2>
+    <form id="login-form">
+      <input id="email" type="email" placeholder="Email" autocomplete="username" required>
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Login</button>
+    </form>
+    <p class="dim">使用 MoeLink 统一账号登录，仅管理员可访问。</p>
+  </section>
+</main>
+
+<main id="app-view" hidden>
   <section><h2>Services</h2><div class="grid" id="services"></div></section>
   <section><h2>Releases</h2><table id="releases"></table></section>
   <section><h2>Requests (last 24h, all services)</h2><div class="bars" id="bars"></div></section>
   <section><h2>API traffic</h2><table id="routes"></table></section>
 </main>
+
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-$('tok').value = localStorage.getItem('gw_token') || '';
-$('save').onclick = () => { localStorage.setItem('gw_token', $('tok').value); refresh(); };
+const TOKEN_KEY = 'gw_jwt';
+const token = () => localStorage.getItem(TOKEN_KEY) || '';
+const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
-async function api(p) {
-  const t = localStorage.getItem('gw_token');
-  const r = await fetch(p, { headers: t ? { authorization: 'Bearer ' + t } : {} });
-  if (r.status === 401) throw new Error('Unauthorized: enter admin token');
+function showLogin(message = '') {
+  $('login-view').hidden = false;
+  $('app-view').hidden = true;
+  $('logout').hidden = true;
+  $('who').textContent = '';
+  $('err').textContent = message;
+}
+
+function showApp(me) {
+  $('login-view').hidden = true;
+  $('app-view').hidden = false;
+  $('logout').hidden = false;
+  $('who').textContent = me.email || '';
+  $('err').textContent = '';
+}
+
+async function api(p, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (token()) headers.authorization = 'Bearer ' + token();
+  const r = await fetch(p, { ...opts, headers });
+  if (r.status === 401) {
+    setToken('');
+    showLogin('请先登录');
+    throw new Error('请先登录');
+  }
+  if (r.status === 403) {
+    setToken('');
+    showLogin('需要管理员权限');
+    throw new Error('需要管理员权限');
+  }
   if (!r.ok) throw new Error(p + ' → HTTP ' + r.status);
   return r.json();
 }
+
 const ago = (iso) => { const s = Math.max(0, (Date.now() - new Date(iso)) / 1000); return s < 90 ? Math.round(s) + 's' : s < 5400 ? Math.round(s/60) + 'm' : s < 129600 ? Math.round(s/3600) + 'h' : Math.round(s/86400) + 'd'; };
 
 function renderServices(d) {
@@ -104,7 +150,41 @@ async function refresh() {
     $('err').textContent = ''; $('upd').textContent = 'updated ' + new Date().toLocaleTimeString();
   } catch (e) { $('err').textContent = e.message; }
 }
-refresh(); setInterval(refresh, 15000);
+
+async function boot() {
+  if (!token()) return showLogin();
+  try {
+    const me = await api('/_gateway/me');
+    showApp(me);
+    await refresh();
+  } catch (e) {
+    if (e.message !== '请先登录' && e.message !== '需要管理员权限') showLogin(e.message);
+  }
+}
+
+$('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('err').textContent = '';
+  try {
+    const r = await fetch('/_gateway/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || '登录失败');
+    setToken(data.token);
+    $('password').value = '';
+    await boot();
+  } catch (e) {
+    $('err').textContent = e.message;
+  }
+};
+
+$('logout').onclick = () => { setToken(''); showLogin(); };
+
+boot();
+setInterval(() => { if (token() && !$('app-view').hidden) refresh(); }, 15000);
 </script>
 </body>
 </html>
