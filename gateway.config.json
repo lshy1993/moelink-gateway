@@ -9,19 +9,11 @@
   },
   "services": [
     {
-      "name": "google-oauth-callback",
-      "prefix": "/auth/google/callback",
-      "target": "http://genshinquiz-backend:8080",
-      "upstreamPath": "/auth/google/callback",
-      "monitor": false,
-      "tracked": []
-    },
-    {
-      "name": "github-oauth-callback",
-      "prefix": "/auth/github/callback",
-      "target": "http://genshinquiz-backend:8080",
-      "upstreamPath": "/auth/github/callback",
-      "monitor": false,
+      "name": "auth-service",
+      "prefix": "/auth",
+      "target": "http://auth-service:8081",
+      "healthPath": "/health",
+      "stripPrefix": false,
       "tracked": []
     },
     {
@@ -61,8 +53,14 @@
       }
     },
     {
+      "name": "maj-websocket",
+      "target": "http://maj-server:8181",
+      "websocket": true,
+      "monitor": false
+    },
+    {
       "name": "genshinquiz-frontend",
-      "target": "http://genshinquiz-frontend:8080",
+      "target": "http://genshinquiz-frontend:3000",
       "healthPath": "/",
       "healthHost": "localhost",
       "release": {
@@ -70,6 +68,13 @@
         "branch": "main",
         "gitPath": "/repos/frontend"
       }
+    },
+    {
+      "name": "node-api-catchall",
+      "prefix": "/",
+      "target": "http://node-api:8020",
+      "monitor": false,
+      "tracked": []
     }
   ],
   "notifiers": [

@@ -37,6 +37,8 @@ function createGateway(cfg) {
   const stats = new Stats({ file: cfg.statsFile });
   const proxied = cfg.services.filter((s) => s.prefix);
   proxied.forEach((s) => stats.register(s.name, s.tracked));
+  const websocketServices = cfg.services.filter((s) => s.websocket);
+  const upgradedSockets = new Set();
   const monitor = new HealthMonitor({
     services: cfg.services.filter((s) => s.monitor !== false),
     options: cfg.health,
@@ -134,6 +136,58 @@ function createGateway(cfg) {
     req.pipe(up);
   }
 
+  // WebSocket / HTTP Upgrade passthrough. The service is selected by `websocket: true`
+  // and its optional `prefix`; with no prefix it accepts every upgrade path.
+  function proxyUpgrade(req, socket, head, svc) {
+    const target = new URL(svc.target);
+    const headers = { ...req.headers, host: target.host };
+    const up = http.request({
+      hostname: target.hostname,
+      port: target.port || 80,
+      method: req.method,
+      path: req.url,
+      headers,
+      timeout: 30000,
+    });
+
+    let upgraded = false;
+    up.on('upgrade', (ur, upSocket, upHead) => {
+      upgraded = true;
+      let response = `HTTP/1.1 ${ur.statusCode} ${ur.statusMessage}\r\n`;
+      for (let i = 0; i < ur.rawHeaders.length; i += 2) {
+        response += `${ur.rawHeaders[i]}: ${ur.rawHeaders[i + 1]}\r\n`;
+      }
+      socket.write(response + '\r\n');
+      if (upHead && upHead.length) socket.write(upHead);
+      upSocket.pipe(socket);
+      socket.pipe(upSocket);
+      upgradedSockets.add(socket);
+      upgradedSockets.add(upSocket);
+      const cleanup = () => {
+        upgradedSockets.delete(socket);
+        upgradedSockets.delete(upSocket);
+      };
+      upSocket.on('error', () => socket.destroy());
+      socket.on('error', () => upSocket.destroy());
+      upSocket.on('close', () => { cleanup(); socket.destroy(); });
+      socket.on('close', () => { cleanup(); upSocket.destroy(); });
+    });
+    up.on('response', (ur) => {
+      // Upstream refused the upgrade; return a normal error instead of hanging.
+      ur.resume();
+      socket.write(
+        `HTTP/1.1 ${ur.statusCode} ${ur.statusMessage}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
+      );
+      socket.destroy();
+    });
+    up.on('timeout', () => up.destroy(new Error('upstream timeout')));
+    up.on('error', () => {
+      if (!upgraded) socket.destroy();
+    });
+    if (head && head.length) up.write(head);
+    up.end();
+  }
+
   const server = http.createServer(async (req, res) => {
     try {
       const url = req.url || '/';
@@ -181,17 +235,40 @@ function createGateway(cfg) {
         return json(res, 404, { error: 'not_found' });
       }
 
-      const svc = proxied.find((s) => pathname === s.prefix || pathname.startsWith(s.prefix + '/'));
+      // prefix "/" is a catch-all: it matches every path except the gateway's own
+      // "/" landing page (handled above) and more specific prefixes registered earlier.
+      const svc = proxied.find(
+        (s) => s.prefix === '/' || pathname === s.prefix || pathname.startsWith(s.prefix + '/'),
+      );
       if (!svc) return json(res, 404, { error: 'no_route' });
       const sub = url.slice(svc.prefix.length) || '/';
       const upstreamPath = svc.upstreamPath
         ? svc.upstreamPath + (sub.includes('?') ? sub.slice(sub.indexOf('?')) : '')
-        : sub.startsWith('/') ? sub : '/' + sub;
+        : svc.stripPrefix === false
+          ? url
+          : sub.startsWith('/') ? sub : '/' + sub;
       proxy(req, res, svc, upstreamPath);
     } catch (e) {
       if (!res.headersSent) json(res, 500, { error: e.message });
       else res.destroy();
     }
+  });
+
+  server.on('upgrade', (req, socket, head) => {
+    const pathname = (req.url || '/').split('?')[0];
+    const svc = websocketServices.find(
+      (s) =>
+        !s.prefix ||
+        s.prefix === '/' ||
+        pathname === s.prefix ||
+        pathname.startsWith(s.prefix + '/'),
+    );
+    if (!svc) {
+      socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    proxyUpgrade(req, socket, head, svc);
   });
 
   return {
@@ -208,6 +285,8 @@ function createGateway(cfg) {
       monitor.stop();
       clearInterval(this.saver);
       stats.save();
+      for (const socket of upgradedSockets) socket.destroy();
+      upgradedSockets.clear();
       server.closeAllConnections?.();
       return new Promise((r) => server.close(r));
     },

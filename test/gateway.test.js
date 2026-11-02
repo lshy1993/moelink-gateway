@@ -45,6 +45,21 @@ test('proxies, counts tracked routes and alerts on down', async () => {
         monitor: false,
         tracked: [],
       },
+      {
+        name: 'keep-prefix',
+        prefix: '/keep',
+        target: `http://127.0.0.1:${upstream.address().port}`,
+        stripPrefix: false,
+        monitor: false,
+        tracked: [],
+      },
+      {
+        name: 'catch-all',
+        prefix: '/',
+        target: `http://127.0.0.1:${upstream.address().port}`,
+        monitor: false,
+        tracked: [],
+      },
     ],
     notifiers: [],
   });
@@ -56,6 +71,10 @@ test('proxies, counts tracked routes and alerts on down', async () => {
   assert.equal(r.body, 'hello /api/public/quote?id=1');
   const callback = await get(port, '/auth/google/callback?code=secret&state=signed');
   assert.equal(callback.body, 'hello /auth/google/callback?code=secret&state=signed');
+  const catchAll = await get(port, '/health');
+  assert.equal(catchAll.body, 'ok');
+  const keepPrefix = await get(port, '/keep/x?y=1');
+  assert.equal(keepPrefix.body, 'hello /keep/x?y=1');
   await get(port, '/api-x/api/public/other');
   await get(port, '/api-x/misc');
   await new Promise((r) => setTimeout(r, 50));
@@ -75,6 +94,56 @@ test('proxies, counts tracked routes and alerts on down', async () => {
   assert.deepEqual(events, ['down', 'recovered']);
 
   await gw.stop();
+  upstream.close();
+});
+
+test('proxies websocket upgrades', async () => {
+  const upstream = http.createServer();
+  upstream.on('upgrade', (_req, socket) => {
+    socket.write(
+      'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n',
+    );
+    socket.on('data', (chunk) => socket.write(chunk));
+  });
+  await new Promise((r) => upstream.listen(0, r));
+
+  const gw = createGateway({
+    port: 0,
+    health: { intervalMs: 3600000, timeoutMs: 500, failThreshold: 2 },
+    services: [
+      {
+        name: 'ws',
+        target: `http://127.0.0.1:${upstream.address().port}`,
+        websocket: true,
+        monitor: false,
+      },
+    ],
+    notifiers: [],
+  });
+  await gw.start();
+  const port = gw.server.address().port;
+
+  const result = await new Promise((resolve, reject) => {
+    const req = http.request({
+      port,
+      path: '/',
+      headers: { Connection: 'Upgrade', Upgrade: 'websocket' },
+    });
+    req.on('upgrade', (res, socket) => {
+      socket.write('ping');
+      socket.once('data', (chunk) => {
+        resolve({ status: res.statusCode, body: chunk.toString() });
+        socket.destroy();
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+
+  assert.equal(result.status, 101);
+  assert.equal(result.body, 'ping');
+  await gw.stop();
+  upstream.closeAllConnections?.();
   upstream.close();
 });
 
