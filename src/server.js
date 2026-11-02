@@ -21,7 +21,11 @@ function createGateway(cfg) {
   const stats = new Stats({ file: cfg.statsFile });
   const proxied = cfg.services.filter((s) => s.prefix);
   proxied.forEach((s) => stats.register(s.name, s.tracked));
-  const monitor = new HealthMonitor({ services: cfg.services, options: cfg.health, notifier: createNotifiers(cfg.notifiers) });
+  const monitor = new HealthMonitor({
+    services: cfg.services.filter((s) => s.monitor !== false),
+    options: cfg.health,
+    notifier: createNotifiers(cfg.notifiers),
+  });
 
   const releases = new ReleaseGuardian({ services: cfg.services, githubToken: process.env.GITHUB_TOKEN });
   const uiHtml = fs.readFileSync(path.join(__dirname, 'dashboard.html'));
@@ -89,7 +93,10 @@ function createGateway(cfg) {
     const svc = proxied.find((s) => pathname === s.prefix || pathname.startsWith(s.prefix + '/'));
     if (!svc) return json(res, 404, { error: 'no_route' });
     const sub = url.slice(svc.prefix.length) || '/';
-    proxy(req, res, svc, sub.startsWith('/') ? sub : '/' + sub);
+    const upstreamPath = svc.upstreamPath
+      ? svc.upstreamPath + (sub.includes('?') ? sub.slice(sub.indexOf('?')) : '')
+      : sub.startsWith('/') ? sub : '/' + sub;
+    proxy(req, res, svc, upstreamPath);
   });
 
   return {

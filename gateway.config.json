@@ -9,6 +9,22 @@
   },
   "services": [
     {
+      "name": "google-oauth-callback",
+      "prefix": "/auth/google/callback",
+      "target": "http://genshinquiz-backend:8080",
+      "upstreamPath": "/auth/google/callback",
+      "monitor": false,
+      "tracked": []
+    },
+    {
+      "name": "github-oauth-callback",
+      "prefix": "/auth/github/callback",
+      "target": "http://genshinquiz-backend:8080",
+      "upstreamPath": "/auth/github/callback",
+      "monitor": false,
+      "tracked": []
+    },
+    {
       "name": "node-api",
       "prefix": "/node-api",
       "target": "http://node-api:8020",

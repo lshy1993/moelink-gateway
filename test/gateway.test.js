@@ -26,7 +26,17 @@ test('proxies, counts tracked routes and alerts on down', async () => {
   const gw = createGateway({
     port: 0,
     health: { intervalMs: 3600000, timeoutMs: 500, failThreshold: 2 },
-    services: [{ name: 'api', prefix: '/api-x', target: `http://127.0.0.1:${upstream.address().port}`, tracked: ['GET /api/public/*'] }],
+    services: [
+      { name: 'api', prefix: '/api-x', target: `http://127.0.0.1:${upstream.address().port}`, tracked: ['GET /api/public/*'] },
+      {
+        name: 'google-oauth-callback',
+        prefix: '/auth/google/callback',
+        target: `http://127.0.0.1:${upstream.address().port}`,
+        upstreamPath: '/auth/google/callback',
+        monitor: false,
+        tracked: [],
+      },
+    ],
     notifiers: [],
   });
   gw.monitor.notifier = { notify: async (e) => events.push(e.type) };
@@ -35,6 +45,8 @@ test('proxies, counts tracked routes and alerts on down', async () => {
 
   const r = await get(port, '/api-x/api/public/quote?id=1');
   assert.equal(r.body, 'hello /api/public/quote?id=1');
+  const callback = await get(port, '/auth/google/callback?code=secret&state=signed');
+  assert.equal(callback.body, 'hello /auth/google/callback?code=secret&state=signed');
   await get(port, '/api-x/api/public/other');
   await get(port, '/api-x/misc');
   await new Promise((r) => setTimeout(r, 50));

@@ -58,16 +58,23 @@ Google Cloud 部署（Cloud Run）:
 
 # Gateway 服务（Node，零依赖）
 
-反向代理 + 各 API 访问量统计 + 服务健康监控/告警。原 nginx 静态示例保留在 `nginx/`。
+反向代理 + 各 API 访问量统计 + 服务健康监控/告警，并提供静态 dashboard。原 nginx 静态示例保留在 `nginx/`。
 
 ```bash
 npm start            # 本地运行，默认 :8000
 npm test
-docker compose --profile moelink up moelink-gateway   # 在根 docker-compose 中
 ```
 
+在本项目根目录的 Compose 项目中，gateway 服务随其他服务一起启动（当前配置不使用 Compose profiles）：
+
+```bash
+docker compose up -d --build moelink-gateway
+```
+
+完整部署和 `.env` 配置请参阅根仓库的 [README](../../README.md)。根 Compose 将仓库目录只读挂载到 `/repos`，供 Release Guardian 读取 Git 状态。
+
 ## 配置 `gateway.config.json`
-- `services[]`：`name`、`prefix`（对外路径前缀，如 `/node-api/...` 转发到 `target`）、`healthPath`（默认 `/health`）、`healthType: "tcp"`（无 HTTP 健康接口时）、`tracked`（需单独统计的路由，如 `"GET /api/public/*"`；其余归入 `(other)`）。
+- `services[]`：`name`、`prefix`（对外路径前缀，如 `/node-api/...` 转发到 `target`）、`upstreamPath`（可选，固定改写转发路径并保留 query，例如 OAuth 回调）、`monitor: false`（可选，跳过健康监控）、`healthPath`（默认 `/health`）、`healthType: "tcp"`（无 HTTP 健康接口时）、`tracked`（需单独统计的路由，如 `"GET /api/public/*"`；其余归入 `(other)`）。
 - 无 `prefix` 的服务只做健康监控，不代理。
 - `health`：`intervalMs` / `timeoutMs` / `failThreshold`（连续失败 N 次才判定 down，恢复时也会通知）。
 - 环境变量：`PORT`、`GATEWAY_ADMIN_TOKEN`（设置后 `/_gateway/*`、`/metrics` 需 `Authorization: Bearer <token>`）、`STATS_FILE`、`GATEWAY_CONFIG`。
