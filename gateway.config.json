@@ -17,6 +17,14 @@
       "tracked": []
     },
     {
+      "name": "stock-worker",
+      "prefix": "/stock",
+      "target": "http://stock-worker:8182",
+      "healthPath": "/health",
+      "stripPrefix": false,
+      "tracked": []
+    },
+    {
       "name": "node-api",
       "prefix": "/node-api",
       "target": "http://node-api:8020",
