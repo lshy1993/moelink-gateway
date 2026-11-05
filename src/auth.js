@@ -15,15 +15,13 @@ class AdminResolver {
   /**
    * @param {object} opts
    * @param {import('./jwksVerifier').JwtVerifier} opts.verifier  token 验签器（公钥来自 auth-service 的 JWKS）
-   * @param {Array<number|string>} opts.adminUserIds 管理员 user_id 白名单（兼容旧配置）
-   * @param {Array<string>} opts.adminEmails 管理员邮箱白名单（推荐，换库后更稳定）
-   * @param {string} opts.nodeApiUrl     未配置白名单时，用于查询 user_role 的 node-api 地址
+   * @param {Array<string>} opts.adminEmails 管理员邮箱白名单（break-glass；邮箱来自 JWT）
+   * @param {string} opts.nodeApiUrl     用于查询 user_role 的 node-api 地址；网页后台改角色后从这里生效
    * @param {boolean} opts.requireAdmin  是否要求管理员（默认 true）
    * @param {number} opts.cacheMs        角色查询缓存时间
    */
   constructor({
     verifier = null,
-    adminUserIds = [],
     adminEmails = [],
     nodeApiUrl = '',
     requireAdmin = true,
@@ -31,9 +29,6 @@ class AdminResolver {
     fetchImpl = fetch,
   } = {}) {
     this.verifier = verifier;
-    this.adminUserIds = new Set(
-      adminUserIds.map((v) => Number(v)).filter((v) => Number.isFinite(v)),
-    );
     this.adminEmails = new Set(
       adminEmails.map((v) => String(v).trim().toLowerCase()).filter(Boolean),
     );
@@ -58,17 +53,14 @@ class AdminResolver {
       return { status: 200, user: { kind: 'user', ...payload } };
     }
 
-    // 配置了白名单：完全本地判断，node-api 挂了也能进后台。
-    // 推荐用邮箱白名单，user_id 只保留兼容。
-    if (this.adminUserIds.size > 0 || this.adminEmails.size > 0) {
-      const email = String(payload.email || '').trim().toLowerCase();
-      const allowed = this.adminUserIds.has(payload.user_id) || this.adminEmails.has(email);
-      return allowed
-        ? { status: 200, user: { kind: 'admin', ...payload } }
-        : { status: 403, error: 'forbidden' };
+    // 邮箱白名单是 break-glass：即使 node-api 不可用，这些邮箱也能进入后台。
+    const email = String(payload.email || '').trim().toLowerCase();
+    if (this.adminEmails.has(email)) {
+      return { status: 200, user: { kind: 'admin', ...payload } };
     }
 
-    // 没配白名单：向 node-api 查询 user_role（group=100 为管理员），短时间缓存
+    // 常规路径：以 users.user_role 为准，网页后台改角色后从这里生效。
+    // 短时间缓存，避免每次请求都访问 node-api。
     const ok = await this.isAdmin(token);
     return ok
       ? { status: 200, user: { kind: 'admin', ...payload } }

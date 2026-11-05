@@ -162,7 +162,7 @@ test('requires a valid admin JWT', async () => {
   const gw = createGateway({
     port: 0,
     verifier: testVerifier(),
-    adminUserIds: [6],
+    adminEmails: ['admin@example.com'],
     health: { intervalMs: 3600000, timeoutMs: 500, failThreshold: 2 },
     services: [],
     notifiers: [],
@@ -219,7 +219,6 @@ test('admin fallback queries node-api POST /user/info', async () => {
   const calls = [];
   const resolver = new AdminResolver({
     verifier: testVerifier(),
-    adminUserIds: [],
     nodeApiUrl: 'http://node-api:8020/',
     fetchImpl: async (url, opts) => {
       calls.push({ url, method: opts.method, auth: opts.headers.Authorization });

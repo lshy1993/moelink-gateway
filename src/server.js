@@ -14,12 +14,6 @@ function loadConfig() {
   cfg.port = +process.env.PORT || cfg.port || 8000;
   cfg.adminToken = process.env.GATEWAY_ADMIN_TOKEN || cfg.adminToken || '';
   cfg.jwksUrl = process.env.AUTH_JWKS_URL || cfg.jwksUrl || '';
-  cfg.adminUserIds = String(
-    process.env.GATEWAY_ADMIN_USER_IDS || cfg.adminUserIds || '',
-  )
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
   cfg.adminEmails = String(
     process.env.GATEWAY_ADMIN_EMAILS || cfg.adminEmails || '',
   )
@@ -58,7 +52,6 @@ function createGateway(cfg) {
   const verifier = cfg.verifier || new JwtVerifier({ jwksUrl: cfg.jwksUrl }).start();
   const auth = new AdminResolver({
     verifier,
-    adminUserIds: cfg.adminUserIds,
     adminEmails: cfg.adminEmails,
     nodeApiUrl: cfg.nodeApiUrl,
     requireAdmin: cfg.requireAdmin !== false,
