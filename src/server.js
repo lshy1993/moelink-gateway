@@ -20,6 +20,12 @@ function loadConfig() {
     .split(',')
     .map((v) => v.trim())
     .filter(Boolean);
+  cfg.adminEmails = String(
+    process.env.GATEWAY_ADMIN_EMAILS || cfg.adminEmails || '',
+  )
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
   cfg.nodeApiUrl = process.env.NODE_API_URL || cfg.nodeApiUrl || 'http://node-api:8020';
   cfg.requireAdmin =
     process.env.GATEWAY_REQUIRE_ADMIN !== 'false' && cfg.requireAdmin !== false;
@@ -53,6 +59,7 @@ function createGateway(cfg) {
   const auth = new AdminResolver({
     verifier,
     adminUserIds: cfg.adminUserIds,
+    adminEmails: cfg.adminEmails,
     nodeApiUrl: cfg.nodeApiUrl,
     requireAdmin: cfg.requireAdmin !== false,
   });

@@ -82,10 +82,12 @@ docker compose up -d --build moelink-gateway
 - 环境变量：`PORT`、`STATS_FILE`、`GATEWAY_CONFIG`。
 - 认证相关：
   - `AUTH_JWKS_URL`：auth-service 的公钥地址（如 `http://auth-service:8081/auth/.well-known/jwks.json`），用于本地校验 MoeLink 统一用户系统的 ES256 JWT；网关不持有任何签名密钥。
-  - `GATEWAY_ADMIN_USER_IDS`：允许登录后台的管理员 `user_id` 白名单（逗号分隔）。配置后完全本地判断，node-api 挂了也能登录。
+  - `GATEWAY_ADMIN_EMAILS`：允许登录后台的管理员邮箱白名单（逗号分隔，推荐）。邮箱来自 auth-service 的 JWT，换库/重建后仍然稳定。
+  - `GATEWAY_ADMIN_USER_IDS`：旧的 `user_id` 白名单，兼容保留；建议迁移到邮箱后清空。
   - `NODE_API_URL`：未配置白名单时，用 `POST /user/info` 查询 `userInfo.group === 100`（管理员），结果缓存 60 秒。
   - `GATEWAY_ADMIN_TOKEN`：机器 token（Prometheus / 脚本），用 `Authorization: Bearer <token>` 访问 `/_gateway/*` 和 `/metrics`，不是网页登录密码。
   - `AUTH_JWKS_URL` 和 `GATEWAY_ADMIN_TOKEN` 都为空时 fail-closed：所有管理接口返回 401。
+  - 管理员白名单：`GATEWAY_ADMIN_EMAILS` 优先；两个白名单都为空时，回退到 node-api 查询 `user_role`。
 
 ## 端点
 - `/_gateway/health` 网关自身存活（公开）
@@ -106,7 +108,7 @@ docker compose up -d --build moelink-gateway
 
 ## Dashboard 与 Release Guardian
 - 直接访问网关根路径 `http://localhost:8000/` 会自动跳转到 `/_gateway/ui`：服务状态、近 24h 请求量、各 API 访问量表格、各服务部署版本。
-- 登录：页面使用 MoeLink 统一账号（`POST /_gateway/login` 转发到 node-api `/user/login`），access token（默认 15 分钟有效）存于浏览器 `localStorage` 的 `gw_jwt`，过期后需要重新登录。只有管理员（`GATEWAY_ADMIN_USER_IDS` 白名单，或 node-api `userInfo.group === 100`）可以访问数据接口；普通登录用户返回 403，未登录返回 401。
+- 登录：页面使用 MoeLink 统一账号（`POST /_gateway/login` 转发到 node-api `/user/login`），access token（默认 15 分钟有效）存于浏览器 `localStorage` 的 `gw_jwt`，过期后需要重新登录。只有管理员（`GATEWAY_ADMIN_EMAILS` / `GATEWAY_ADMIN_USER_IDS` 白名单，或 node-api `userInfo.group === 100`）可以访问数据接口；普通登录用户返回 403，未登录返回 401。
 - 版本检测：在服务的 `release` 配置 `repo`/`branch`，并选择部署版本来源：
   - `versionPath`（推荐生产环境）：服务暴露如 `/version` 返回 `{"commit":"<sha>","version":"1.2.3"}`（也识别 `sha`/`gitSha`/`hash`）。构建时可用 `GIT_SHA=$(git rev-parse HEAD)` 注入。
   - `gitPath`：直接读取挂载目录的 `.git` HEAD（本地开发 compose 已把 `./repos` 以只读挂到 `/repos`）。

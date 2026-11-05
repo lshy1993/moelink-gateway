@@ -15,7 +15,8 @@ class AdminResolver {
   /**
    * @param {object} opts
    * @param {import('./jwksVerifier').JwtVerifier} opts.verifier  token 验签器（公钥来自 auth-service 的 JWKS）
-   * @param {Array<number|string>} opts.adminUserIds 管理员 user_id 白名单（配置后不再依赖 node-api）
+   * @param {Array<number|string>} opts.adminUserIds 管理员 user_id 白名单（兼容旧配置）
+   * @param {Array<string>} opts.adminEmails 管理员邮箱白名单（推荐，换库后更稳定）
    * @param {string} opts.nodeApiUrl     未配置白名单时，用于查询 user_role 的 node-api 地址
    * @param {boolean} opts.requireAdmin  是否要求管理员（默认 true）
    * @param {number} opts.cacheMs        角色查询缓存时间
@@ -23,6 +24,7 @@ class AdminResolver {
   constructor({
     verifier = null,
     adminUserIds = [],
+    adminEmails = [],
     nodeApiUrl = '',
     requireAdmin = true,
     cacheMs = 60_000,
@@ -31,6 +33,9 @@ class AdminResolver {
     this.verifier = verifier;
     this.adminUserIds = new Set(
       adminUserIds.map((v) => Number(v)).filter((v) => Number.isFinite(v)),
+    );
+    this.adminEmails = new Set(
+      adminEmails.map((v) => String(v).trim().toLowerCase()).filter(Boolean),
     );
     this.nodeApiUrl = nodeApiUrl;
     this.requireAdmin = requireAdmin;
@@ -53,9 +58,12 @@ class AdminResolver {
       return { status: 200, user: { kind: 'user', ...payload } };
     }
 
-    // 配置了白名单：完全本地判断，node-api 挂了也能进后台
-    if (this.adminUserIds.size > 0) {
-      return this.adminUserIds.has(payload.user_id)
+    // 配置了白名单：完全本地判断，node-api 挂了也能进后台。
+    // 推荐用邮箱白名单，user_id 只保留兼容。
+    if (this.adminUserIds.size > 0 || this.adminEmails.size > 0) {
+      const email = String(payload.email || '').trim().toLowerCase();
+      const allowed = this.adminUserIds.has(payload.user_id) || this.adminEmails.has(email);
+      return allowed
         ? { status: 200, user: { kind: 'admin', ...payload } }
         : { status: 403, error: 'forbidden' };
     }
