@@ -6,13 +6,14 @@ const { HealthMonitor } = require('./health');
 const { createNotifiers } = require('./notifiers');
 const { ReleaseGuardian } = require('./release');
 const { AdminResolver, getBearer } = require('./auth');
+const { JwtVerifier } = require('./jwksVerifier');
 
 function loadConfig() {
   const file = process.env.GATEWAY_CONFIG || path.join(__dirname, '..', 'gateway.config.json');
   const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
   cfg.port = +process.env.PORT || cfg.port || 8000;
   cfg.adminToken = process.env.GATEWAY_ADMIN_TOKEN || cfg.adminToken || '';
-  cfg.jwtSecret = process.env.JWT_SECRET || cfg.jwtSecret || '';
+  cfg.jwksUrl = process.env.AUTH_JWKS_URL || cfg.jwksUrl || '';
   cfg.adminUserIds = String(
     process.env.GATEWAY_ADMIN_USER_IDS || cfg.adminUserIds || '',
   )
@@ -23,9 +24,9 @@ function loadConfig() {
   cfg.requireAdmin =
     process.env.GATEWAY_REQUIRE_ADMIN !== 'false' && cfg.requireAdmin !== false;
   cfg.statsFile = process.env.STATS_FILE || cfg.statsFile;
-  if (!cfg.jwtSecret && !cfg.adminToken) {
+  if (!cfg.jwksUrl && !cfg.adminToken) {
     console.warn(
-      '[gateway] JWT_SECRET and GATEWAY_ADMIN_TOKEN are both empty; all admin endpoints will return 401',
+      '[gateway] AUTH_JWKS_URL and GATEWAY_ADMIN_TOKEN are both empty; all admin endpoints will return 401',
     );
   }
   return cfg;
@@ -47,8 +48,10 @@ function createGateway(cfg) {
 
   const releases = new ReleaseGuardian({ services: cfg.services, githubToken: process.env.GITHUB_TOKEN });
   const uiHtml = fs.readFileSync(path.join(__dirname, 'dashboard.html'));
+  // 只持有公钥：由 auth-service 的 JWKS 提供（测试可通过 cfg.verifier 注入）
+  const verifier = cfg.verifier || new JwtVerifier({ jwksUrl: cfg.jwksUrl }).start();
   const auth = new AdminResolver({
-    jwtSecret: cfg.jwtSecret,
+    verifier,
     adminUserIds: cfg.adminUserIds,
     nodeApiUrl: cfg.nodeApiUrl,
     requireAdmin: cfg.requireAdmin !== false,

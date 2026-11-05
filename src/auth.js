@@ -1,48 +1,10 @@
 const crypto = require('node:crypto');
 
 /**
- * MoeLink 统一用户系统 JWT（HS256）。
- * token 由 genshin-quiz Go 后端签发，claims: { user_id, email, exp }。
- * 这里只做本地验签和过期校验，不依赖 node-api 是否在线。
+ * MoeLink 统一用户系统 JWT（ES256）。
+ * token 由 auth-service 签发，claims: { user_id, email, exp }。
+ * 这里只用 JWKS 公钥做本地验签和过期校验，不依赖 node-api 是否在线。
  */
-
-const ALLOWED_ALG = 'HS256';
-
-function decodeJSON(part) {
-  return JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
-}
-
-function verifyJWT(token, secret) {
-  if (!secret || !token) return null;
-
-  const parts = String(token).split('.');
-  if (parts.length !== 3) return null;
-
-  let header;
-  let payload;
-  try {
-    header = decodeJSON(parts[0]);
-    payload = decodeJSON(parts[1]);
-  } catch {
-    return null;
-  }
-
-  if (!header || header.alg !== ALLOWED_ALG) return null;
-
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(`${parts[0]}.${parts[1]}`)
-    .digest('base64url');
-
-  const a = Buffer.from(expected);
-  const b = Buffer.from(parts[2]);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-
-  if (!payload.exp || Math.floor(Date.now() / 1000) >= Number(payload.exp)) return null;
-  if (typeof payload.user_id !== 'number' || typeof payload.email !== 'string') return null;
-
-  return payload;
-}
 
 function getBearer(req) {
   const auth = req.headers.authorization || '';
@@ -52,21 +14,21 @@ function getBearer(req) {
 class AdminResolver {
   /**
    * @param {object} opts
-   * @param {string} opts.jwtSecret      与 Go 后端一致的 JWT_SECRET
+   * @param {import('./jwksVerifier').JwtVerifier} opts.verifier  token 验签器（公钥来自 auth-service 的 JWKS）
    * @param {Array<number|string>} opts.adminUserIds 管理员 user_id 白名单（配置后不再依赖 node-api）
    * @param {string} opts.nodeApiUrl     未配置白名单时，用于查询 user_role 的 node-api 地址
    * @param {boolean} opts.requireAdmin  是否要求管理员（默认 true）
    * @param {number} opts.cacheMs        角色查询缓存时间
    */
   constructor({
-    jwtSecret = '',
+    verifier = null,
     adminUserIds = [],
     nodeApiUrl = '',
     requireAdmin = true,
     cacheMs = 60_000,
     fetchImpl = fetch,
   } = {}) {
-    this.jwtSecret = jwtSecret;
+    this.verifier = verifier;
     this.adminUserIds = new Set(
       adminUserIds.map((v) => Number(v)).filter((v) => Number.isFinite(v)),
     );
@@ -84,7 +46,7 @@ class AdminResolver {
     const token = getBearer(req);
     if (!token) return { status: 401, error: 'unauthorized' };
 
-    const payload = verifyJWT(token, this.jwtSecret);
+    const payload = this.verifier ? this.verifier.verify(token) : null;
     if (!payload) return { status: 401, error: 'unauthorized' };
 
     if (!this.requireAdmin) {
@@ -146,4 +108,4 @@ class AdminResolver {
   }
 }
 
-module.exports = { verifyJWT, getBearer, AdminResolver };
+module.exports = { getBearer, AdminResolver };

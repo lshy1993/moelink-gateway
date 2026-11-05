@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { createGateway } = require('../src/server');
+const { JwtVerifier } = require('../src/jwksVerifier');
 
 const get = (port, p, headers = {}) =>
   new Promise((resolve, reject) => {
@@ -13,10 +14,20 @@ const get = (port, p, headers = {}) =>
     }).on('error', reject);
   });
 
-function signJWT(payload, secret) {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+const KID = 'test-key';
+const newKeyPair = () => crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+const testKey = newKeyPair();
+const testVerifier = (keyPair = testKey) => {
+  const jwk = keyPair.publicKey.export({ format: 'jwk' });
+  return new JwtVerifier({ jwks: { keys: [{ ...jwk, kid: KID }] } });
+};
+
+function signJWT(payload, privateKey) {
+  const header = Buffer.from(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid: KID })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ iss: 'moelink-auth', ...payload })).toString('base64url');
+  const sig = crypto
+    .sign('sha256', Buffer.from(`${header}.${body}`), { key: privateKey, dsaEncoding: 'ieee-p1363' })
+    .toString('base64url');
   return `${header}.${body}.${sig}`;
 }
 
@@ -148,10 +159,9 @@ test('proxies websocket upgrades', async () => {
 });
 
 test('requires a valid admin JWT', async () => {
-  const secret = 'test-jwt-secret';
   const gw = createGateway({
     port: 0,
-    jwtSecret: secret,
+    verifier: testVerifier(),
     adminUserIds: [6],
     health: { intervalMs: 3600000, timeoutMs: 500, failThreshold: 2 },
     services: [],
@@ -166,7 +176,7 @@ test('requires a valid admin JWT', async () => {
   // 普通用户
   const normal = signJWT(
     { user_id: 7, email: 'user@example.com', exp: Math.floor(Date.now() / 1000) + 60 },
-    secret,
+    testKey.privateKey,
   );
   assert.equal(
     (await get(port, '/_gateway/stats', { authorization: `Bearer ${normal}` })).status,
@@ -176,7 +186,7 @@ test('requires a valid admin JWT', async () => {
   // 管理员
   const admin = signJWT(
     { user_id: 6, email: 'admin@example.com', exp: Math.floor(Date.now() / 1000) + 60 },
-    secret,
+    testKey.privateKey,
   );
   const ok = await get(port, '/_gateway/stats', { authorization: `Bearer ${admin}` });
   assert.equal(ok.status, 200);
@@ -184,7 +194,7 @@ test('requires a valid admin JWT', async () => {
   // 过期 token
   const expired = signJWT(
     { user_id: 6, email: 'admin@example.com', exp: Math.floor(Date.now() / 1000) - 1 },
-    secret,
+    testKey.privateKey,
   );
   assert.equal(
     (await get(port, '/_gateway/stats', { authorization: `Bearer ${expired}` })).status,
@@ -194,7 +204,7 @@ test('requires a valid admin JWT', async () => {
   // 错误签名
   const forged = signJWT(
     { user_id: 6, email: 'admin@example.com', exp: Math.floor(Date.now() / 1000) + 60 },
-    'wrong-secret',
+    newKeyPair().privateKey,
   );
   assert.equal(
     (await get(port, '/_gateway/stats', { authorization: `Bearer ${forged}` })).status,
@@ -206,10 +216,9 @@ test('requires a valid admin JWT', async () => {
 
 test('admin fallback queries node-api POST /user/info', async () => {
   const { AdminResolver } = require('../src/auth');
-  const secret = 'test-jwt-secret';
   const calls = [];
   const resolver = new AdminResolver({
-    jwtSecret: secret,
+    verifier: testVerifier(),
     adminUserIds: [],
     nodeApiUrl: 'http://node-api:8020/',
     fetchImpl: async (url, opts) => {
@@ -220,7 +229,7 @@ test('admin fallback queries node-api POST /user/info', async () => {
 
   const token = signJWT(
     { user_id: 6, email: 'admin@example.com', exp: Math.floor(Date.now() / 1000) + 60 },
-    secret,
+    testKey.privateKey,
   );
   const result = await resolver.authenticate({
     headers: { authorization: `Bearer ${token}` },
@@ -246,4 +255,16 @@ test('readGitHead resolves branch ref', () => {
   fs.writeFileSync(path.join(dir, '.git/refs/heads/main'), sha + '\n');
   assert.deepEqual(readGitHead(dir), { sha, branch: 'main' });
   fs.rmSync(dir, { recursive: true });
+});
+
+test('rejects tokens issued to third-party SSO clients', () => {
+  const sign = (extra) =>
+    signJWT({ user_id: 6, email: 'a@b.c', exp: Math.floor(Date.now() / 1000) + 60, ...extra }, testKey.privateKey);
+  assert.ok(testVerifier().verify(sign({})));
+  assert.equal(testVerifier().verify(sign({ client_id: 'partner' })), null);
+  const lenient = new JwtVerifier({
+    jwks: { keys: [{ ...testKey.publicKey.export({ format: 'jwk' }), kid: KID }] },
+    allowClientTokens: true,
+  });
+  assert.ok(lenient.verify(sign({ client_id: 'partner' })));
 });
