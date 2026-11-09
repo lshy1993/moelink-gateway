@@ -37,6 +37,10 @@
   #login-form { display:grid; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; }
   #login-form input { width:100%; }
   #login-form button { justify-self:start; }
+  .ssoRow { display:grid; gap:8px; margin-bottom:14px; }
+  .ssoBtn { display:block; text-align:center; padding:8px 10px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:#7cb7ff; }
+  .ssoBtn:hover { background:#11161f; }
+  .divider { color:var(--dim); font-size:12px; margin:14px 0 10px; }
 </style>
 </head>
 <body>
@@ -51,12 +55,17 @@
 <main id="login-view" hidden>
   <section>
     <h2>Admin login</h2>
+    <div class="ssoRow">
+      <a id="sso-google" class="ssoBtn" href="#">使用 Google 登录</a>
+      <a id="sso-github" class="ssoBtn" href="#">使用 GitHub 登录</a>
+    </div>
+    <p class="dim">使用 MoeLink 统一账号 SSO 登录，仅管理员可访问。</p>
+    <div class="divider">或使用管理员密码</div>
     <form id="login-form">
       <input id="email" type="email" placeholder="Email" autocomplete="username" required>
       <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
       <button type="submit">Login</button>
     </form>
-    <p class="dim">使用 MoeLink 统一账号登录，仅管理员可访问。</p>
   </section>
 </main>
 
@@ -74,6 +83,48 @@ const TOKEN_KEY = 'gw_jwt';
 const token = () => localStorage.getItem(TOKEN_KEY) || '';
 const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
+function oauthStartUrl(provider) {
+  const returnTo = location.origin + '/_gateway/ui';
+  return `/auth/oauth/${provider}?return_to=${encodeURIComponent(returnTo)}`;
+}
+
+$('sso-google').href = oauthStartUrl('google');
+$('sso-github').href = oauthStartUrl('github');
+
+function consumeOAuthHash() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const oauthToken = params.get('oauth_token');
+  const oauthError = params.get('oauth_error');
+  if (!oauthToken && !oauthError) return;
+
+  window.history.replaceState(null, document.title, location.pathname + location.search);
+  if (oauthToken) {
+    setToken(oauthToken);
+    return true;
+  }
+  const messages = {
+    authorization_denied: '已取消授权',
+    invalid_state: '登录验证已过期，请重试',
+    provider_failed: '第三方账号验证失败，请重试',
+    account_failed: '账号登录失败，请联系管理员',
+  };
+  showLogin(messages[oauthError] || 'SSO 登录失败');
+  return false;
+}
+
+async function refreshAccessToken() {
+  try {
+    const r = await fetch('/auth/session/refresh', { method: 'POST', credentials: 'include' });
+    if (!r.ok) return false;
+    const data = await r.json().catch(() => ({}));
+    if (!data.token) return false;
+    setToken(data.token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function showLogin(message = '') {
   $('login-view').hidden = false;
   $('app-view').hidden = true;
@@ -90,18 +141,19 @@ function showApp(me) {
   $('err').textContent = '';
 }
 
-async function api(p, opts = {}) {
+async function api(p, opts = {}, retried = false) {
   const headers = { ...(opts.headers || {}) };
   if (token()) headers.authorization = 'Bearer ' + token();
   const r = await fetch(p, { ...opts, headers });
   if (r.status === 401) {
+    if (!retried && (await refreshAccessToken())) return api(p, opts, true);
     setToken('');
     showLogin('请先登录');
     throw new Error('请先登录');
   }
   if (r.status === 403) {
     setToken('');
-    showLogin('需要管理员权限');
+    location.replace('/_gateway/denied');
     throw new Error('需要管理员权限');
   }
   if (!r.ok) throw new Error(p + ' → HTTP ' + r.status);
@@ -152,7 +204,8 @@ async function refresh() {
 }
 
 async function boot() {
-  if (!token()) return showLogin();
+  if (consumeOAuthHash() === false) return;
+  if (!token() && !(await refreshAccessToken())) return showLogin();
   try {
     const me = await api('/_gateway/me');
     showApp(me);

@@ -34,6 +34,51 @@ function loadConfig() {
 
 const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'];
 
+const DENIED_HTML = `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>需要管理员权限 · MoeLink Gateway</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f1218; --card:#181d27; --line:#262d3b; --fg:#e6e9ef; --dim:#8b93a5; --warn:#f5b342; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  .card { width:min(460px,100%); padding:28px; background:var(--card); border:1px solid var(--line); border-radius:12px; text-align:center; }
+  .icon { font-size:34px; color:var(--warn); }
+  h1 { margin:14px 0 8px; font-size:20px; }
+  p { margin:0 0 16px; color:var(--dim); }
+  a { display:inline-block; margin:4px; padding:7px 14px; color:#7cb7ff; text-decoration:none; border:1px solid var(--line); border-radius:7px; }
+  a:hover { background:#11161f; }
+  small { color:#6e7788; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="icon">⛔</div>
+    <h1>需要管理员权限</h1>
+    <p>你的 MoeLink 账号已登录，但当前账号不是管理员，无法访问 Gateway Dashboard。</p>
+    <p>请联系管理员在网页后台把你的 <code>user_role</code> 设为 1。</p>
+    <a id="back" href="https://moelink.site/">返回 MoeLink</a>
+    <a href="/_gateway/ui">重新登录</a>
+    <p><small><span id="count">5</span> 秒后自动返回 MoeLink</small></p>
+  </main>
+  <script>
+    const back = ['localhost','127.0.0.1','[::1]'].includes(location.hostname)
+      ? 'http://localhost:5173/'
+      : 'https://moelink.site/';
+    document.getElementById('back').href = back;
+    let n = 5;
+    const count = document.getElementById('count');
+    const timer = setInterval(() => {
+      n -= 1;
+      count.textContent = String(n);
+      if (n <= 0) { clearInterval(timer); location.replace(back); }
+    }, 1000);
+  </script>
+</body>
+</html>`;
+
 function createGateway(cfg) {
   const stats = new Stats({ file: cfg.statsFile });
   const proxied = cfg.services.filter((s) => s.prefix);
@@ -203,6 +248,10 @@ function createGateway(cfg) {
       if (pathname === '/_gateway/ui' || pathname === '/_gateway/ui/') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         return res.end(uiHtml);
+      }
+      if (pathname === '/_gateway/denied' || pathname === '/_gateway/denied/') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end(DENIED_HTML);
       }
       if (pathname === '/_gateway/health') return json(res, 200, { ok: true });
       if (pathname === '/_gateway/login' && req.method === 'POST') {
