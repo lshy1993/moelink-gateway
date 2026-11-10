@@ -21,6 +21,7 @@ function loadConfig() {
     .map((v) => v.trim())
     .filter(Boolean);
   cfg.nodeApiUrl = process.env.NODE_API_URL || cfg.nodeApiUrl || 'http://node-api:8020';
+  cfg.authServiceUrl = process.env.AUTH_SERVICE_URL || cfg.authServiceUrl || 'http://auth-service:8081';
   cfg.requireAdmin =
     process.env.GATEWAY_REQUIRE_ADMIN !== 'false' && cfg.requireAdmin !== false;
   cfg.statsFile = process.env.STATS_FILE || cfg.statsFile;
@@ -143,14 +144,23 @@ function createGateway(cfg) {
     }
 
     try {
-      const upstream = await fetch(cfg.nodeApiUrl.replace(/\/$/, '') + '/user/login', {
+      // 直接请求 auth-service，并把 Set-Cookie（HttpOnly 会话）转发给浏览器，
+      // 这样密码登录也能在 token 过期/reload 后用会话 Cookie 自动续期。
+      const upstream = await fetch(cfg.authServiceUrl.replace(/\/$/, '') + '/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email, password }),
         signal: AbortSignal.timeout(8_000),
       });
       const data = await upstream.json().catch(() => null);
-      return json(res, upstream.status, data || { error: 'login_failed' });
+      const setCookies =
+        typeof upstream.headers.getSetCookie === 'function'
+          ? upstream.headers.getSetCookie()
+          : [upstream.headers.get('set-cookie')].filter(Boolean);
+      res.statusCode = upstream.status;
+      res.setHeader('content-type', 'application/json');
+      if (setCookies.length) res.setHeader('set-cookie', setCookies);
+      return res.end(JSON.stringify(data || { error: 'login_failed' }));
     } catch {
       return json(res, 502, { error: 'auth_service_unavailable' });
     }
