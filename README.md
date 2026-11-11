@@ -107,7 +107,7 @@ docker compose up -d --build moelink-gateway
 
 ## Dashboard 与 Release Guardian
 - 直接访问网关根路径 `http://localhost:8000/` 会自动跳转到 `/_gateway/ui`：服务状态、近 24h 请求量、各 API 访问量表格、各服务部署版本。
-- 登录：优先使用 MoeLink 统一账号 SSO（Google / GitHub，走 auth-service 的 OAuth；也保留管理员密码表单作为本地备用）。密码表单直接请求 auth-service，并转发 HttpOnly 会话 Cookie。access token 存在浏览器 `localStorage` 的 `gw_jwt`，过期或刷新页面时用会话 Cookie 调用 `/auth/session/refresh` 自动续期。管理员以 `users.user_role=1` 为准，可在网页后台修改；`GATEWAY_ADMIN_EMAILS` 是 node-api 不可用时的 break-glass。已登录但非管理员会跳转到 `/_gateway/denied`，5 秒后自动返回 MoeLink。
+- 登录：不再提供 Google / GitHub 登录入口。已登录 MoeLink 时，Dashboard 会用共享的 HttpOnly 会话 Cookie 调用 `/auth/session/refresh` 自动进入；也可以使用管理员邮箱 + 密码作为备用。密码表单直接请求 auth-service，并转发 Set-Cookie。access token 存在浏览器 `localStorage` 的 `gw_jwt`，过期或刷新页面时会重新用会话 Cookie 续期。管理员以 `users.user_role=1` 为准，可在网页后台修改；`GATEWAY_ADMIN_EMAILS` 是 node-api 不可用时的 break-glass。已登录但非管理员会跳转到 `/_gateway/denied`，5 秒后自动返回 MoeLink。
 - 版本检测：在服务的 `release` 配置 `repo`/`branch`，并选择部署版本来源：
   - `versionPath`（推荐生产环境）：服务暴露如 `/version` 返回 `{"commit":"<sha>","version":"1.2.3"}`（也识别 `sha`/`gitSha`/`hash`）。构建时可用 `GIT_SHA=$(git rev-parse HEAD)` 注入。
   - `gitPath`：直接读取挂载目录的 `.git` HEAD（本地开发 compose 已把 `./repos` 以只读挂到 `/repos`）。
