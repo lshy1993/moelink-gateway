@@ -174,8 +174,9 @@ function renderServices(d) {
 
 function renderReleases(d) {
   const rows = d.releases.map((r) => {
-    const cls = r.status === 'up-to-date' ? 'ok' : r.status === 'behind' ? 'behind' : r.error ? 'bad' : '';
-    const label = r.status === 'behind' ? `behind by ${r.behindBy}` : r.status;
+    const hasError = !!(r.error || r.githubError);
+    const cls = r.status === 'up-to-date' ? 'ok' : r.status === 'behind' ? 'behind' : hasError ? 'bad' : '';
+    const label = r.status === 'behind' ? `behind by ${r.behindBy}` : hasError && r.status === 'unknown' ? 'error' : r.status;
     const sha = r.deployedSha ? `<a href="https://github.com/${esc(r.repo)}/commit/${esc(r.deployedSha)}" target="_blank"><code>${esc(r.deployedShort)}</code></a>` : '-';
     const latest = r.latestSha ? `<code>${esc(r.latestShort)}</code> <span class="dim">${esc(r.latestMessage)}</span>` : '-';
     return `<tr><td>${esc(r.service)}</td><td>${sha}${r.version ? ` <span class="dim">v${esc(r.version)}</span>` : ''}</td>

@@ -36,7 +36,7 @@
       ],
       "release": {
         "repo": "lshy1993/node-api",
-        "branch": "develop",
+        "branch": "main",
         "gitPath": "/repos/node-api"
       }
     },
@@ -48,7 +48,7 @@
       "tracked": [],
       "release": {
         "repo": "lshy1993/genshin-quiz-backend",
-        "branch": "development",
+        "branch": "main",
         "gitPath": "/repos/backend"
       }
     },
@@ -58,7 +58,7 @@
       "healthType": "tcp",
       "release": {
         "repo": "lshy1993/node-api",
-        "branch": "develop",
+        "branch": "main",
         "gitPath": "/repos/node-api"
       }
     },

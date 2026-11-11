@@ -48,7 +48,18 @@ class ReleaseGuardian {
       headers: { accept: 'application/vnd.github+json', 'user-agent': 'moelink-gateway', ...(this.token && { authorization: `Bearer ${this.token}` }) },
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
+    if (!res.ok) {
+      // 把 GitHub 的错误原因带出来，例如：
+      // HTTP 422: No commit found for SHA: develop
+      let detail = '';
+      try {
+        const body = await res.json();
+        if (body && body.message) detail = `: ${body.message}`;
+      } catch {
+        /* response body is not JSON */
+      }
+      throw new Error(`GitHub HTTP ${res.status}${detail}`);
+    }
     const v = await res.json();
     this.cache.set(p, { at: Date.now(), v });
     return v;
