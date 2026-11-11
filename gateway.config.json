@@ -90,6 +90,24 @@
   "notifiers": [
     {
       "type": "log"
+    },
+    {
+      "type": "qq",
+      "enabled": "$QQ_NOTIFIER_ENABLED",
+      "url": "$QQ_NOTIFIER_URL",
+      "user_id": "$QQ_NOTIFIER_USER_ID",
+      "token": "$QQ_NOTIFIER_TOKEN"
+    },
+    {
+      "type": "telegram",
+      "enabled": "$TELEGRAM_NOTIFIER_ENABLED",
+      "bot_token": "$TELEGRAM_BOT_TOKEN",
+      "chat_id": "$TELEGRAM_CHAT_ID"
+    },
+    {
+      "type": "discord",
+      "enabled": "$DISCORD_NOTIFIER_ENABLED",
+      "webhook_url": "$DISCORD_WEBHOOK_URL"
     }
   ]
 }

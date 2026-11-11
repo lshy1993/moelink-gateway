@@ -99,9 +99,36 @@ docker compose up -d --build moelink-gateway
 - `/metrics` Prometheus 格式（需 `GATEWAY_ADMIN_TOKEN` 或管理员 JWT）
 
 ## BOT 通知
-`notifiers` 支持 `log`、`webhook`、`telegram`、`discord`，密钥用 `"$ENV_NAME"` 引用环境变量，例如：
-`{ "type": "telegram", "token": "$TG_TOKEN", "chatId": "$TG_CHAT_ID" }`。
-新增渠道只需在 `src/notifiers/index.js` 加一个 factory。
+Guardian 的 `HealthMonitor` 本身就是一个后台定时器：每 `health.intervalMs`（默认 15 秒）检查一次服务，连续 `health.failThreshold` 次失败后标记 DOWN，并发送一次通知；恢复时再发送一次 RECOVERED。它运行在 gateway 的 Node 进程内，不需要额外守护进程。
+
+通知统一由 `NotificationManager` 管理，适配器实现 `sendAlert(alert)`，同时提供 `send_alert(title, text)` 别名。内置适配器：
+
+- `log`：输出到 gateway 日志
+- `webhook`：通用 JSON Webhook
+- `qq` / `napcat`：NapCat OneBot HTTP API，支持 `send_private_msg` / `send_group_msg`
+- `telegram`：Telegram Bot `sendMessage`
+- `discord`：Discord Webhook
+
+配置支持数组或对象两种形式，值可以用 `"$ENV_NAME"` 引用环境变量：
+
+```json
+"notifiers": [
+  { "type": "log" },
+  { "type": "qq", "enabled": "$QQ_NOTIFIER_ENABLED", "url": "$QQ_NOTIFIER_URL", "user_id": "$QQ_NOTIFIER_USER_ID" },
+  { "type": "telegram", "enabled": "$TELEGRAM_NOTIFIER_ENABLED", "bot_token": "$TELEGRAM_BOT_TOKEN", "chat_id": "$TELEGRAM_CHAT_ID" },
+  { "type": "discord", "enabled": "$DISCORD_NOTIFIER_ENABLED", "webhook_url": "$DISCORD_WEBHOOK_URL" }
+]
+```
+
+也可以写成：
+
+```json
+"notifiers": {
+  "telegram": { "enabled": true, "bot_token": "$TELEGRAM_BOT_TOKEN", "chat_id": "$TELEGRAM_CHAT_ID" }
+}
+```
+
+`enabled` 留空或为 `false` 时跳过该渠道。QQ 适配器在 Docker 内访问宿主机 NapCat 时不要写 `127.0.0.1`，应使用 NAS 局域网 IP，或给 gateway 加 `host.docker.internal` 映射。
 
 注意：统计保存在内存并每 30 秒写入 `STATS_FILE`；`tracked` 外的路径不会按具体路径记录，避免基数膨胀。
 
