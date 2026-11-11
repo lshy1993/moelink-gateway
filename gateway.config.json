@@ -14,7 +14,8 @@
       "target": "http://auth-service:8081",
       "healthPath": "/health",
       "stripPrefix": false,
-      "tracked": []
+      "tracked": [],
+      "repo": "lshy1993/genshin-quiz-backend"
     },
     {
       "name": "stock-worker",
@@ -22,7 +23,8 @@
       "target": "http://stock-worker:8182",
       "healthPath": "/health",
       "stripPrefix": false,
-      "tracked": []
+      "tracked": [],
+      "repo": "lshy1993/node-api"
     },
     {
       "name": "node-api",

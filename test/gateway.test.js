@@ -47,7 +47,7 @@ test('proxies, counts tracked routes and alerts on down', async () => {
     adminToken: 'test-token',
     health: { intervalMs: 3600000, timeoutMs: 500, failThreshold: 2 },
     services: [
-      { name: 'api', prefix: '/api-x', target: `http://127.0.0.1:${upstream.address().port}`, tracked: ['GET /api/public/*'] },
+      { name: 'api', prefix: '/api-x', target: `http://127.0.0.1:${upstream.address().port}`, tracked: ['GET /api/public/*'], repo: 'lshy1993/example-repo' },
       {
         name: 'google-oauth-callback',
         prefix: '/auth/google/callback',
@@ -94,6 +94,11 @@ test('proxies, counts tracked routes and alerts on down', async () => {
   );
   assert.equal(stats.routes.find((x) => x.route === 'GET /api/public/*').count, 2);
   assert.equal(stats.routes.find((x) => x.route === 'GET (other)').count, 1);
+
+  const services = JSON.parse(
+    (await get(port, '/_gateway/services', { authorization: 'Bearer test-token' })).body,
+  );
+  assert.equal(services.api.repo, 'lshy1993/example-repo');
 
   healthy = false;
   await gw.monitor.checkAll();

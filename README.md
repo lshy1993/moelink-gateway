@@ -74,7 +74,7 @@ docker compose up -d --build moelink-gateway
 完整部署和 `.env` 配置请参阅根仓库的 [README](../../README.md)。根 Compose 将仓库目录只读挂载到 `/repos`，供 Release Guardian 读取 Git 状态。
 
 ## 配置 `gateway.config.json`
-- `services[]`：`name`、`prefix`（对外路径前缀，如 `/node-api/...` 转发到 `target`；当前使用 `/auth`、`/stock`、`/node-api`、`/go-api`）、`upstreamPath`（可选，固定改写转发路径并保留 query，例如 OAuth 回调）、`monitor: false`（可选，跳过健康监控）、`healthPath`（默认 `/health`）、`healthType: "tcp"`（无 HTTP 健康接口时）、`tracked`（需单独统计的路由，如 `"GET /api/public/*"`；其余归入 `(other)`）。
+- `services[]`：`name`、`prefix`（对外路径前缀，如 `/node-api/...` 转发到 `target`；当前使用 `/auth`、`/stock`、`/node-api`、`/go-api`）、`upstreamPath`（可选，固定改写转发路径并保留 query，例如 OAuth 回调）、`monitor: false`（可选，跳过健康监控）、`healthPath`（默认 `/health`）、`healthType: "tcp"`（无 HTTP 健康接口时）、`tracked`（需单独统计的路由，如 `"GET /api/public/*"`；其余归入 `(other)`）、`repo`（可选，`owner/repo`，Dashboard 的服务名会链接到该 GitHub 仓库；未设置时回退到 `release.repo`）。
 - `stripPrefix: false`（可选）：转发时保留原始完整路径，默认会去掉 `prefix`。例如 `/auth` → `auth-service` 需要保留 `/auth/check`，而 `/go-api` 则需要去掉前缀。
 - `websocket: true`：把 HTTP Upgrade 请求（WebSocket）转发到该 `target`；可配合 `prefix` 限定路径，不写 `prefix` 表示接受所有 upgrade 请求。当前用于 `maj-server`。
 - 无 `prefix` 的服务只做健康监控，不代理。

@@ -312,7 +312,16 @@ function createGateway(cfg) {
             email: who.email,
           });
         }
-        if (pathname === '/_gateway/services') return json(res, 200, monitor.snapshot());
+        if (pathname === '/_gateway/services') {
+          const snapshot = monitor.snapshot();
+          const repos = Object.fromEntries(
+            cfg.services.map((s) => [s.name, s.repo || s.release?.repo || null]),
+          );
+          for (const [name, state] of Object.entries(snapshot)) {
+            state.repo = repos[name] || null;
+          }
+          return json(res, 200, snapshot);
+        }
         if (pathname === '/_gateway/releases') {
           try {
             return json(res, 200, await releases.snapshot());
