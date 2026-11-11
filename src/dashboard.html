@@ -79,15 +79,40 @@ const TOKEN_KEY = 'gw_jwt';
 const token = () => localStorage.getItem(TOKEN_KEY) || '';
 const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
+// MoeLink 已登录时可通过 #token=... 传递短期 access token，
+// 用于共享 Cookie 不可用的浏览器；读取后立即从地址栏清除。
+function consumeTokenHash() {
+  const handoff = new URLSearchParams(location.hash.slice(1)).get('token');
+  if (!handoff) return false;
+  history.replaceState(null, document.title, location.pathname + location.search);
+  setToken(handoff);
+  return true;
+}
+
+let authError = '';
+
 async function refreshAccessToken() {
+  authError = '';
   try {
     const r = await fetch('/auth/session/refresh', { method: 'POST', credentials: 'include' });
-    if (!r.ok) return false;
-    const data = await r.json().catch(() => ({}));
-    if (!data.token) return false;
-    setToken(data.token);
-    return true;
+    if (r.ok) {
+      const data = await r.json().catch(() => ({}));
+      if (!data.token) {
+        authError = '认证服务没有返回 token，请稍后重试。';
+        return false;
+      }
+      setToken(data.token);
+      return true;
+    }
+    authError =
+      r.status === 401
+        ? '未检测到 MoeLink 共享登录状态。请先登录 moelink.site；如果刚登录过，请退出后重新登录，让共享 Cookie 更新。'
+        : r.status === 403
+          ? 'Guardian 来源未被认证服务信任，请检查 OAUTH_ALLOWED_REDIRECT_ORIGINS。'
+          : `认证服务返回 HTTP ${r.status}，请稍后重试。`;
+    return false;
   } catch {
+    authError = '认证服务暂时不可用，请稍后重试。';
     return false;
   }
 }
@@ -115,7 +140,7 @@ async function api(p, opts = {}, retried = false) {
   if (r.status === 401) {
     if (!retried && (await refreshAccessToken())) return api(p, opts, true);
     setToken('');
-    showLogin('请先登录');
+    showLogin(authError || '请先登录');
     throw new Error('请先登录');
   }
   if (r.status === 403) {
@@ -171,8 +196,9 @@ async function refresh() {
 }
 
 async function boot() {
-  if (!token() && !(await refreshAccessToken())) {
-    return showLogin('未检测到 MoeLink 登录状态，请先在 moelink.site 登录，或使用管理员密码。');
+  const handedOff = consumeTokenHash();
+  if (!token() && !handedOff && !(await refreshAccessToken())) {
+    return showLogin(authError || '请先登录 moelink.site，或使用管理员密码。');
   }
   try {
     const me = await api('/_gateway/me');
@@ -185,6 +211,8 @@ async function boot() {
 
 $('retry-session').onclick = async () => {
   $('err').textContent = '';
+  // 强制重新读取共享会话 Cookie，避免继续使用已经失效的本地 token
+  setToken('');
   await boot();
 };
 
