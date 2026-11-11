@@ -40,7 +40,7 @@ test('QQ adapter calls NapCat send_private_msg', async () => {
   assert.equal(calls[0].url, 'http://napcat:3000/send_private_msg');
   assert.deepEqual(calls[0].body, {
     user_id: '12345678',
-    message: 'DOWN: node-api\nconnection refused',
+    message: [{ type: 'text', data: { text: 'DOWN: node-api\nconnection refused' } }],
   });
 });
 
@@ -167,7 +167,7 @@ test('$ENV placeholders are resolved and an unset enabled flag disables a channe
   assert.equal(enabledManager.notifiers.length, 1);
   await enabledManager.sendAlert('title', 'text');
   assert.equal(calls[0].url, 'http://napcat:3000/send_private_msg');
-  assert.equal(calls[0].body.message, 'title\ntext');
+  assert.deepEqual(calls[0].body.message, [{ type: 'text', data: { text: 'title\ntext' } }]);
 });
 
 test('missing required notifier options are skipped with a warning', () => {

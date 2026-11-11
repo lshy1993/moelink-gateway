@@ -116,6 +116,10 @@ class QQNotifier extends Notifier {
     this.userId = opts.userId ?? opts.user_id;
     this.groupId = opts.groupId ?? opts.group_id;
     this.token = opts.token || opts.accessToken || opts.access_token;
+    // NapCat / OneBot 11 支持字符串或消息段数组；默认使用 array
+    this.messageFormat = String(
+      opts.messageFormat || opts.message_format || 'array',
+    ).toLowerCase();
     if (!this.url) throw new Error('qq notifier requires url');
     if (this.userId == null && this.groupId == null) {
       throw new Error('qq notifier requires user_id or group_id');
@@ -129,8 +133,13 @@ class QQNotifier extends Notifier {
       ? base
       : `${base}/${isGroup ? 'send_group_msg' : 'send_private_msg'}`;
     const target = isGroup ? { group_id: this.groupId } : { user_id: this.userId };
+    const text = messageOf(alert);
+    const message =
+      this.messageFormat === 'string'
+        ? text
+        : [{ type: 'text', data: { text } }];
     const headers = this.token ? { authorization: `Bearer ${this.token}` } : {};
-    const data = await postJson(endpoint, { ...target, message: messageOf(alert) }, headers);
+    const data = await postJson(endpoint, { ...target, message }, headers);
     if (data && data.status && data.status !== 'ok') {
       throw new Error(`QQ API status=${data.status} retcode=${data.retcode ?? '?'}`);
     }
