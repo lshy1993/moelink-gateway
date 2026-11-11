@@ -8,6 +8,31 @@ const { ReleaseGuardian } = require('./release');
 const { AdminResolver, getBearer } = require('./auth');
 const { JwtVerifier } = require('./jwksVerifier');
 
+// 构建版本号：优先使用环境变量，镜像构建时未提供则读取 Dockerfile 生成的时间戳文件
+function readBuildVersion() {
+  const fromEnv = String(process.env.GATEWAY_BUILD_VERSION || '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const stamp = fs.readFileSync(path.join(__dirname, '..', 'BUILD_VERSION'), 'utf8').trim();
+    if (stamp) return stamp;
+  } catch (_err) {
+    /* 源码运行时没有 BUILD_VERSION 文件 */
+  }
+  return 'dev';
+}
+
+const BUILD_VERSION = readBuildVersion();
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[char]);
+}
+
 function loadConfig() {
   const file = process.env.GATEWAY_CONFIG || path.join(__dirname, '..', 'gateway.config.json');
   const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -63,6 +88,7 @@ const DENIED_HTML = `<!doctype html>
     <a id="back" href="https://moelink.site/">返回 MoeLink</a>
     <a href="/_gateway/ui">重新登录</a>
     <p><small><span id="count">5</span> 秒后自动返回 MoeLink</small></p>
+    <p><small>build __BUILD_VERSION__</small></p>
   </main>
   <script>
     const back = ['localhost','127.0.0.1','[::1]'].includes(location.hostname)
@@ -93,7 +119,10 @@ function createGateway(cfg) {
   });
 
   const releases = new ReleaseGuardian({ services: cfg.services, githubToken: process.env.GITHUB_TOKEN });
-  const uiHtml = fs.readFileSync(path.join(__dirname, 'dashboard.html'));
+  const uiHtml = fs
+    .readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8')
+    .replace(/__BUILD_VERSION__/g, escapeHtml(BUILD_VERSION));
+  const deniedHtml = DENIED_HTML.replace(/__BUILD_VERSION__/g, escapeHtml(BUILD_VERSION));
   // 只持有公钥：由 auth-service 的 JWKS 提供（测试可通过 cfg.verifier 注入）
   const verifier = cfg.verifier || new JwtVerifier({ jwksUrl: cfg.jwksUrl }).start();
   const auth = new AdminResolver({
@@ -261,9 +290,11 @@ function createGateway(cfg) {
       }
       if (pathname === '/_gateway/denied' || pathname === '/_gateway/denied/') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        return res.end(DENIED_HTML);
+        return res.end(deniedHtml);
       }
-      if (pathname === '/_gateway/health') return json(res, 200, { ok: true });
+      if (pathname === '/_gateway/health') {
+        return json(res, 200, { ok: true, version: BUILD_VERSION });
+      }
       if (pathname === '/_gateway/login' && req.method === 'POST') {
         await handleLogin(req, res);
         return;
