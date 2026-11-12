@@ -113,8 +113,10 @@ class QQNotifier extends Notifier {
   constructor(opts) {
     super(opts);
     this.url = opts.url;
-    this.userId = opts.userId ?? opts.user_id;
-    this.groupId = opts.groupId ?? opts.group_id;
+    const target = (value) =>
+      value === undefined || value === null || value === '' ? null : value;
+    this.userId = target(opts.userId ?? opts.user_id);
+    this.groupId = target(opts.groupId ?? opts.group_id);
     this.token = opts.token || opts.accessToken || opts.access_token;
     // NapCat / OneBot 11 支持字符串或消息段数组；默认使用 array
     this.messageFormat = String(
@@ -126,26 +128,51 @@ class QQNotifier extends Notifier {
     }
   }
 
+  async sendOne(endpoint, target, message, headers) {
+    const data = await postJson(endpoint, { ...target, message }, headers);
+    if (data && data.status && data.status !== 'ok') {
+      throw new Error(
+        `${endpoint}: status=${data.status} retcode=${data.retcode ?? '?'}`,
+      );
+    }
+    if (data && data.retcode !== undefined && data.retcode !== 0) {
+      throw new Error(`${endpoint}: retcode=${data.retcode}`);
+    }
+  }
+
   async sendAlert(alert) {
-    const base = this.url.replace(/\/$/, '');
-    const isGroup = this.groupId != null;
-    const endpoint = /\/send_(private|group)_msg$/.test(base)
-      ? base
-      : `${base}/${isGroup ? 'send_group_msg' : 'send_private_msg'}`;
-    const target = isGroup ? { group_id: this.groupId } : { user_id: this.userId };
+    // 兼容 url 直接写到 /send_private_msg 或 /send_group_msg 的配置；
+    // 同时配置 user_id 和 group_id 时，两边都发。
+    const raw = this.url.replace(/\/$/, '');
+    const base = raw.replace(/\/send_(private|group)_msg$/, '');
     const text = messageOf(alert);
     const message =
       this.messageFormat === 'string'
         ? text
         : [{ type: 'text', data: { text } }];
     const headers = this.token ? { authorization: `Bearer ${this.token}` } : {};
-    const data = await postJson(endpoint, { ...target, message }, headers);
-    if (data && data.status && data.status !== 'ok') {
-      throw new Error(`QQ API status=${data.status} retcode=${data.retcode ?? '?'}`);
+
+    const targets = [];
+    if (this.userId != null) {
+      targets.push({
+        endpoint: `${base}/send_private_msg`,
+        body: { user_id: this.userId },
+      });
     }
-    if (data && data.retcode !== undefined && data.retcode !== 0) {
-      throw new Error(`QQ API retcode=${data.retcode}`);
+    if (this.groupId != null) {
+      targets.push({
+        endpoint: `${base}/send_group_msg`,
+        body: { group_id: this.groupId },
+      });
     }
+
+    const results = await Promise.allSettled(
+      targets.map((t) => this.sendOne(t.endpoint, t.body, message, headers)),
+    );
+    const errors = results
+      .filter((r) => r.status === 'rejected')
+      .map((r) => r.reason.message);
+    if (errors.length) throw new Error(errors.join('; '));
   }
 }
 

@@ -119,6 +119,7 @@ Guardian 的 `HealthMonitor` 本身就是一个后台定时器：每 `health.int
     "enabled": "$QQ_NOTIFIER_ENABLED",
     "url": "http://192.168.40.61:3020/send_private_msg",
     "user_id": "$QQ_NOTIFIER_USER_ID",
+    "group_id": "$QQ_NOTIFIER_GROUP_ID",
     "token": "$QQ_NOTIFIER_TOKEN",
     "message_format": "array"
   },
@@ -135,7 +136,7 @@ Guardian 的 `HealthMonitor` 本身就是一个后台定时器：每 `health.int
 }
 ```
 
-`enabled` 留空或为 `false` 时跳过该渠道。QQ 适配器默认使用 `message_format: "array"`，即 `[{"type":"text","data":{"text":"..."}}]`；同时支持 `"string"`。NapCat 容器内部监听 `3000`，本机映射到宿主 `3020`，所以 gateway 应使用 `192.168.40.61:3020`，不能写 `127.0.0.1:3000`（那是 GenshinQuiz 前端）。
+`enabled` 留空或为 `false` 时跳过该渠道。QQ 适配器默认使用 `message_format: "array"`，即 `[{"type":"text","data":{"text":"..."}}]`；同时支持 `"string"`。同时配置 `user_id` 和 `group_id` 时会分别发送私聊和群消息；只配置其中一个时只发对应目标。NapCat 容器内部监听 `3000`，本机映射到宿主 `3020`，所以 gateway 应使用 `192.168.40.61:3020`，不能写 `127.0.0.1:3000`（那是 GenshinQuiz 前端）。
 
 `genshinquiz-frontend` 是静态编译产物，配置中已设置 `monitor: false`，不会参与 DOWN/RECOVERED 通知，但仍会出现在 Release 版本对比里。
 

@@ -97,6 +97,7 @@
       "enabled": "$QQ_NOTIFIER_ENABLED",
       "url": "http://192.168.40.61:3020/send_private_msg",
       "user_id": "$QQ_NOTIFIER_USER_ID",
+      "group_id": "$QQ_NOTIFIER_GROUP_ID",
       "token": "$QQ_NOTIFIER_TOKEN",
       "message_format": "array"
     },

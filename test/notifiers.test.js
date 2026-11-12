@@ -44,6 +44,36 @@ test('QQ adapter calls NapCat send_private_msg', async () => {
   });
 });
 
+test('QQ adapter sends both private and group when both are configured', async () => {
+  const calls = mockFetch();
+  const manager = new NotificationManager([
+    {
+      type: 'qq',
+      enabled: true,
+      url: 'http://napcat:3000/send_private_msg',
+      user_id: '12345678',
+      group_id: '87654321',
+      token: 'token-1',
+    },
+  ]);
+
+  await manager.sendAlert('DOWN: node-api', 'connection refused');
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, 'http://napcat:3000/send_private_msg');
+  assert.equal(calls[1].url, 'http://napcat:3000/send_group_msg');
+  assert.deepEqual(calls[0].body, {
+    user_id: '12345678',
+    message: [{ type: 'text', data: { text: 'DOWN: node-api\nconnection refused' } }],
+  });
+  assert.deepEqual(calls[1].body, {
+    group_id: '87654321',
+    message: [{ type: 'text', data: { text: 'DOWN: node-api\nconnection refused' } }],
+  });
+  assert.equal(calls[0].headers.authorization, 'Bearer token-1');
+  assert.equal(calls[1].headers.authorization, 'Bearer token-1');
+});
+
 test('Telegram adapter uses bot API sendMessage', async () => {
   const calls = mockFetch();
   const manager = new NotificationManager([
@@ -174,6 +204,8 @@ test('missing required notifier options are skipped with a warning', () => {
   const manager = new NotificationManager([
     { type: 'telegram', enabled: true, chat_id: '1' },
     { type: 'qq', enabled: true, url: 'http://napcat:3000' },
+    // empty env placeholders must not count as configured targets
+    { type: 'qq', enabled: true, url: 'http://napcat:3000', user_id: '', group_id: '' },
   ]);
   assert.equal(manager.notifiers.length, 0);
 });
