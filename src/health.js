@@ -68,7 +68,7 @@ class HealthMonitor {
         const downFor = Math.round((Date.now() - st.since) / 1000);
         st.up = true;
         st.since = Date.now();
-        await this.emit('recovered', svc, `✅ ${svc.name} recovered (down ${downFor}s)`);
+        await this.emit('recovered', svc, `MoeLink 服务【${svc.name}】已恢复（宕机 ${downFor}s）`);
       }
       return;
     }
@@ -77,7 +77,7 @@ class HealthMonitor {
     if (st.up && st.failures >= this.opts.failThreshold) {
       st.up = false;
       st.since = Date.now();
-      await this.emit('down', svc, `🔴 ${svc.name} is DOWN: ${err} (${svc.target})`);
+      await this.emit('down', svc, `MoeLink 服务【${svc.name}】出错：${err}`);
     }
   }
 

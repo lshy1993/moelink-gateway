@@ -36,6 +36,12 @@ function messageOf(alert = {}) {
   return title && text ? `${title}\n${text}` : String(title || text);
 }
 
+function toList(value) {
+  if (value === undefined || value === null || value === '') return [];
+  const items = Array.isArray(value) ? value : String(value).split(',');
+  return [...new Set(items.map((item) => String(item).trim()).filter(Boolean))];
+}
+
 class Notifier {
   constructor({ type, enabled = true } = {}) {
     this.type = type || this.constructor.name;
@@ -116,15 +122,17 @@ class QQNotifier extends Notifier {
     const target = (value) =>
       value === undefined || value === null || value === '' ? null : value;
     this.userId = target(opts.userId ?? opts.user_id);
-    this.groupId = target(opts.groupId ?? opts.group_id);
+    this.groupIds = toList(
+      opts.groupIds ?? opts.group_ids ?? opts.groupId ?? opts.group_id,
+    );
     this.token = opts.token || opts.accessToken || opts.access_token;
     // NapCat / OneBot 11 支持字符串或消息段数组；默认使用 array
     this.messageFormat = String(
       opts.messageFormat || opts.message_format || 'array',
     ).toLowerCase();
     if (!this.url) throw new Error('qq notifier requires url');
-    if (this.userId == null && this.groupId == null) {
-      throw new Error('qq notifier requires user_id or group_id');
+    if (this.userId == null && this.groupIds.length === 0) {
+      throw new Error('qq notifier requires user_id or group_id(s)');
     }
   }
 
@@ -159,10 +167,10 @@ class QQNotifier extends Notifier {
         body: { user_id: this.userId },
       });
     }
-    if (this.groupId != null) {
+    for (const groupId of this.groupIds) {
       targets.push({
         endpoint: `${base}/send_group_msg`,
-        body: { group_id: this.groupId },
+        body: { group_id: groupId },
       });
     }
 

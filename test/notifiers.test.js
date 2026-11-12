@@ -74,6 +74,40 @@ test('QQ adapter sends both private and group when both are configured', async (
   assert.equal(calls[1].headers.authorization, 'Bearer token-1');
 });
 
+test('QQ adapter sends to every comma-separated group id', async () => {
+  const calls = mockFetch();
+  const manager = new NotificationManager([
+    {
+      type: 'qq',
+      enabled: true,
+      url: 'http://napcat:3020/send_private_msg',
+      group_ids: '696771659,495214885,668907434',
+      token: 'token-1',
+    },
+  ]);
+
+  await manager.sendAlert('MoeLink 服务【node-api】出错', 'timeout');
+
+  assert.equal(calls.length, 3);
+  assert.deepEqual(
+    calls.map((c) => c.url),
+    [
+      'http://napcat:3020/send_group_msg',
+      'http://napcat:3020/send_group_msg',
+      'http://napcat:3020/send_group_msg',
+    ],
+  );
+  assert.deepEqual(
+    calls.map((c) => c.body.group_id),
+    ['696771659', '495214885', '668907434'],
+  );
+  for (const call of calls) {
+    assert.deepEqual(call.body.message, [
+      { type: 'text', data: { text: 'MoeLink 服务【node-api】出错\ntimeout' } },
+    ]);
+  }
+});
+
 test('Telegram adapter uses bot API sendMessage', async () => {
   const calls = mockFetch();
   const manager = new NotificationManager([

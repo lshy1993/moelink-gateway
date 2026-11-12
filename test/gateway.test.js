@@ -74,7 +74,7 @@ test('proxies, counts tracked routes and alerts on down', async () => {
     ],
     notifiers: [],
   });
-  gw.monitor.notifier = { notify: async (e) => events.push(e.type) };
+  gw.monitor.notifier = { notify: async (e) => events.push(e) };
   await gw.start();
   const port = gw.server.address().port;
 
@@ -104,10 +104,12 @@ test('proxies, counts tracked routes and alerts on down', async () => {
   await gw.monitor.checkAll();
   assert.deepEqual(events, []);
   await gw.monitor.checkAll();
-  assert.deepEqual(events, ['down']);
+  assert.deepEqual(events.map((e) => e.type), ['down']);
   healthy = true;
   await gw.monitor.checkAll();
-  assert.deepEqual(events, ['down', 'recovered']);
+  assert.deepEqual(events.map((e) => e.type), ['down', 'recovered']);
+  assert.match(events[0].message, /^MoeLink 服务【api】出错：/);
+  assert.match(events[1].message, /^MoeLink 服务【api】已恢复（宕机 \d+s）/);
 
   await gw.stop();
   upstream.close();
